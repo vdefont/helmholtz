@@ -1,15 +1,14 @@
 import numpy as np
 import sys
+import os
 
-# Returns a list of users. Each user is a dict of item ratings
-def loadData(fileName):
-    u1 = {"A":5, "B":4, "C":3}
-    u2 = {"B":2}
-    u3 = {"A":4, "B":3}
-    u4 = {"B":4, "C":2}
-    u5 = {"B":5, "C":2}
-    users = [u1,u2,u3,u4,u5]
-    return users
+import fileReader
+
+# TODO:
+# - Compare to rankings online (chrome bookmark)
+# - Try different winMargin methods in fileReader (ex: binary)
+# - weight more for most recent dates?
+# - Try different averaging mechanisms
 
 # Returns:
 # - Comparison matrix (skew-symmetric)
@@ -86,11 +85,25 @@ def solve(Y, W):
 
     return s
 
+def writeFile(itemValues, fileName):
+    sortedItems = sorted(itemValues, key=itemValues.get, reverse=True)
+    with open(fileName, 'w') as file:
+        for sortedItem in sortedItems:
+            line = ",".join([sortedItem, str(itemValues[sortedItem])])
+            file.write(line)
+            file.write('\n')
+
 pyVersion = sys.version_info[0]
-if (pyVersion < 3):
+if pyVersion < 3:
     print("Please use at least python3")
+elif len(sys.argv) < 1:
+    print("Please provide the following args:")
+    print("- outputFile")
 else:
-    users = loadData("testfile")
+    outputFileName = sys.argv[1]
+    outputFile = "output" + os.sep + outputFileName
+
+    users = fileReader.loadTennisData()
     Y, W, itemIndices = makeMatrices(users)
     s = solve(Y, W)
 
@@ -98,4 +111,5 @@ else:
     itemValues = {}
     for item in itemIndices:
         itemValues[item] = s[itemIndices[item]]
-    print(itemValues)
+
+    writeFile(itemValues, outputFile)
