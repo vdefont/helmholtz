@@ -5,10 +5,14 @@ import os
 import fileReader
 
 # TODO:
-# - Compare to rankings online (chrome bookmark)
-# - Try different winMargin methods in fileReader (ex: binary)
-# - weight more for most recent dates?
-# - Try different averaging mechanisms
+# - Figure out residual flows - esp. curl
+# - Compare
+#   - to rankings online (chrome bookmark)
+#   - to PCA 
+# - diff. methods
+#   - Try different winMargin methods in fileReader (ex: binary)
+#   - weight more for most recent dates?
+#   - Try different averaging mechanisms
 
 # Returns:
 # - Comparison matrix (skew-symmetric)
