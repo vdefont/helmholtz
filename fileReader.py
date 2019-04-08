@@ -11,7 +11,7 @@ def testData():
     users = [u1,u2,u3,u4,u5]
     return users
 
-def loadTennisData():
+def loadTennisData(maxRows):
 
     # Read lines from file
 
@@ -32,6 +32,9 @@ def loadTennisData():
 
     file.close()
 
+    curPlayerI = 0
+    curPlayers = {}
+
     # List of match dicts: loser -> 0, winner -> log(loserGames/loserGames)
     matches = []
     for line in lines:
@@ -44,13 +47,21 @@ def loadTennisData():
             continue
         # Fraction of games won minus 0.5
         winMargin = winnerGames / (winnerGames + loserGames) - 0.5
-        # winMargin = 1 # Binary 
+        # winMargin = 1 # Binary
 
         loserName = " ".join(line["loser_name"].split())
         winnerName = " ".join(line["winner_name"].split())
+
+        # If already reached max rows, stop
+        if len(curPlayers) >= maxRows and not (loserName in curPlayers and winnerName in curPlayers):
+            continue
+        for name in [loserName, winnerName]:
+            if name not in curPlayers:
+                curPlayers[name] = curPlayerI
+                curPlayerI += 1
 
         match[loserName] = 0.0
         match[winnerName] = winMargin
         matches.append(match)
 
-    return matches
+    return matches, curPlayers

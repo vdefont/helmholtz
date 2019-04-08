@@ -1,6 +1,7 @@
 import numpy as np
 import sys
 import os
+import math
 
 import fileReader
 
@@ -8,7 +9,7 @@ import fileReader
 # - Figure out residual flows - esp. curl
 # - Compare
 #   - to rankings online (chrome bookmark)
-#   - to PCA 
+#   - to PCA
 # - diff. methods
 #   - Try different winMargin methods in fileReader (ex: binary)
 #   - weight more for most recent dates?
@@ -89,6 +90,80 @@ def solve(Y, W):
 
     return s
 
+def gradient (vec):
+    n = len(vec)
+    M = np.zeros((n,n))
+    for i in range(n-1):
+        for j in range(i+1, n):
+            diff = vec[j] - vec[i]
+            M[i][j] = diff
+            M[j][i] = -1 * diff
+    return M
+
+def doubleCumSum (n):
+    sum = 0
+    for e in range(n, 0, -1):
+        sum += e * (n + 1 - e)
+    return sum
+
+def makeCurlMatrix (numVars):
+
+    freeVars = numVars - 2
+
+    nRow = doubleCumSum(freeVars)
+    nCol = int(numVars * (numVars - 1) / 2)
+    M = np.zeros((nRow, nCol))
+
+    row = 0
+    c1 = -1
+    c2 = freeVars
+    c3start = freeVars
+
+    for top in range(freeVars, 0, -1):
+
+        c3 = c3start
+        c3start += top
+
+        for cur in range(top, 0, -1):
+
+            c1 += 1
+            c2 -= cur
+
+            for i in range(cur):
+                c2 += 1
+                c3 += 1
+
+                M[row][c1] = 1
+                M[row][c2] = -1
+                M[row][c3] = 1
+
+                row += 1
+
+        c1 += 1
+        c2 += top
+
+    return M
+
+# Useful for handling curl
+def matrixToVec (M):
+    n = len(M)
+    vec = []
+    for i in range(n-1):
+        for j in range(i+1, n):
+            vec.append(M[i][j])
+    return vec
+def vecToMatrix (v):
+    n = int((1 + math.sqrt(1 + 8 * len(v))) / 2)
+    M = np.zeros((n,n))
+    c = 0
+    for i in range(n-1):
+        for j in range(i+1, n):
+            M[i][j] = v[c]
+            M[j][i] = -1 * v[c]
+            c += 1
+    return M
+
+
 def writeFile(itemValues, fileName):
     sortedItems = sorted(itemValues, key=itemValues.get, reverse=True)
     with open(fileName, 'w') as file:
@@ -107,9 +182,19 @@ else:
     outputFileName = sys.argv[1]
     outputFile = "output" + os.sep + outputFileName
 
-    users = fileReader.loadTennisData()
+    maxRows = 6
+    users, order = fileReader.loadTennisData(maxRows)
+
+    print("\nPlayers: ")
+    for name in order:
+        print(str(order[name]) + ": " + name)
+
+    print("\nGames: ")
+    for u in users:
+        print(u)
     Y, W, itemIndices = makeMatrices(users)
     s = solve(Y, W)
+    gradientFlow = gradient(s)
 
     # Associate items to values
     itemValues = {}
@@ -117,3 +202,27 @@ else:
         itemValues[item] = s[itemIndices[item]]
 
     writeFile(itemValues, outputFile)
+
+    # Get residual
+    curlM = makeCurlMatrix(len(Y))
+    curlMpInv = np.linalg.pinv(curlM)
+    yVec = matrixToVec(Y)
+    curlResidualVec = np.matmul(curlMpInv, np.matmul(curlM, yVec))
+    curlResidual = vecToMatrix(curlResidualVec)
+
+    harmonicResidual = Y - gradientFlow - curlResidual
+
+    curlVals = np.matmul(curlM, yVec)
+    print("\nCurls:")
+    i = 0
+    for j in range(len(Y)):
+        for k in range(j+1,len(Y)):
+            for l in range(k+1,len(Y)):
+                if abs(curlVals[i]) > 0.0:
+                    print("{} {} {}: {}".format(j, k, l, curlVals[i]))
+                i += 1
+
+    print("\nNorms:")
+    print("Gradient: " + str(np.linalg.norm(gradientFlow)))
+    print("Curl:     " + str(np.linalg.norm(curlResidual)))
+    print("Harmonic: " + str(np.linalg.norm(harmonicResidual)))
