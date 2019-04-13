@@ -2,6 +2,7 @@ import numpy as np
 import sys
 import os
 import math
+import scipy.sparse.linalg
 
 import fileReader
 
@@ -151,7 +152,7 @@ def matrixToVec (M):
     for i in range(n-1):
         for j in range(i+1, n):
             vec.append(M[i][j])
-    return vec
+    return np.array(vec)
 def vecToMatrix (v):
     n = int((1 + math.sqrt(1 + 8 * len(v))) / 2)
     M = np.zeros((n,n))
@@ -163,6 +164,34 @@ def vecToMatrix (v):
             c += 1
     return M
 
+def getCurlResidualOld(Y, W):
+    curlM = makeCurlMatrix(len(Y))
+    curlMpInv = np.linalg.pinv(curlM)
+    yVec = matrixToVec(Y)
+    curlResidualVec = np.matmul(curlMpInv, np.matmul(curlM, yVec))
+    return vecToMatrix(curlResidualVec)
+
+def getCurlResidual(Y, W):
+
+    curlM = makeCurlMatrix(len(Y))
+
+    weightVec = matrixToVec(W)
+    # Replace 0 by 1 in sqrt matrix to avoid dividing by 0
+    for i in range(len(weightVec)):
+        if weightVec[i] == 0:
+            weightVec[i] = 1
+
+    curlAdj = curlM.transpose() / np.array([weightVec]).transpose()
+
+    # Multiply Y and curl by sqrt of weights before solving (to weight appropriately)
+    Ylsqr = matrixToVec(Y) * (weightVec ** 0.5)
+    curlLsqr = curlAdj * np.array([weightVec ** 0.5]).transpose()
+
+    # Solve
+    lsqrTriples = scipy.sparse.linalg.lsqr(curlLsqr, Ylsqr)[0]
+
+    curlResidualVec = np.matmul(curlAdj, lsqrTriples)
+    return vecToMatrix(curlResidualVec)
 
 def writeFile(itemValues, fileName):
     sortedItems = sorted(itemValues, key=itemValues.get, reverse=True)
@@ -182,16 +211,9 @@ else:
     outputFileName = sys.argv[1]
     outputFile = "output" + os.sep + outputFileName
 
-    maxRows = 6
+    maxRows = 90
     users, order = fileReader.loadTennisData(maxRows)
 
-    print("\nPlayers: ")
-    for name in order:
-        print(str(order[name]) + ": " + name)
-
-    print("\nGames: ")
-    for u in users:
-        print(u)
     Y, W, itemIndices = makeMatrices(users)
     s = solve(Y, W)
     gradientFlow = gradient(s)
@@ -203,24 +225,10 @@ else:
 
     writeFile(itemValues, outputFile)
 
-    # Get residual
-    curlM = makeCurlMatrix(len(Y))
-    curlMpInv = np.linalg.pinv(curlM)
-    yVec = matrixToVec(Y)
-    curlResidualVec = np.matmul(curlMpInv, np.matmul(curlM, yVec))
-    curlResidual = vecToMatrix(curlResidualVec)
+    # Solve least squares: Y = curl* X
+    curlResidual = getCurlResidual(Y, W)
 
     harmonicResidual = Y - gradientFlow - curlResidual
-
-    curlVals = np.matmul(curlM, yVec)
-    print("\nCurls:")
-    i = 0
-    for j in range(len(Y)):
-        for k in range(j+1,len(Y)):
-            for l in range(k+1,len(Y)):
-                if abs(curlVals[i]) > 0.0:
-                    print("{} {} {}: {}".format(j, k, l, curlVals[i]))
-                i += 1
 
     print("\nNorms:")
     print("Gradient: " + str(np.linalg.norm(gradientFlow)))
