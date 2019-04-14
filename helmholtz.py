@@ -211,7 +211,7 @@ else:
     outputFileName = sys.argv[1]
     outputFile = "output" + os.sep + outputFileName
 
-    maxRows = 90
+    maxRows = 100
     users, order = fileReader.loadTennisData(maxRows)
 
     Y, W, itemIndices = makeMatrices(users)
