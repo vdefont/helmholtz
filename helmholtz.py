@@ -37,7 +37,8 @@ def makeMatrices(users, weights = None):
     W = np.array([[0.0] * numItems] * numItems) # Weight matrix
 
     # Add user data to comparison and weight matrix
-    for user in users:
+    for userI in range(len(users)):
+        user = users[userI]
         userItems = list(user.keys())
 
         # Loop through all pairs
@@ -49,7 +50,7 @@ def makeMatrices(users, weights = None):
                 item2I = itemIndices[item2]
 
                 # Update weights matrix
-                weight = weights[user] if weights else 1
+                weight = weights[userI] if weights else 1
                 W[item1I][item2I] += weight
                 W[item2I][item1I] += weight
 
@@ -212,14 +213,11 @@ else:
     outputFileName = sys.argv[1]
     outputFile = "output" + os.sep + outputFileName
 
-<<<<<<< HEAD
-    maxRows = 100
-=======
-    maxRows = 10
->>>>>>> 65c4b7eef8798767635ee1c01d68d8f5b8bb9c86
-    users, order = fileReader.loadTennisData(maxRows)
+    weightMethod = "TOURNEY"
+    maxPlayers = 90
+    users, weights, order = fileReader.loadTennisData(weightMethod = weightMethod, maxPlayers=maxPlayers)
 
-    Y, W, itemIndices = makeMatrices(users)
+    Y, W, itemIndices = makeMatrices(users, weights)
     s = solve(Y, W)
     gradientFlow = gradient(s)
 
