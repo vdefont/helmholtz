@@ -20,7 +20,7 @@ import fileReader
 # - Comparison matrix (skew-symmetric)
 # - Weight matrix (symmetric)
 # - Item indices
-def makeMatrices(users):
+def makeMatrices(users, weights = None):
 
     # Compile a list of all items that were compared
     itemIndices = {}
@@ -49,8 +49,9 @@ def makeMatrices(users):
                 item2I = itemIndices[item2]
 
                 # Update weights matrix
-                W[item1I][item2I] += 1
-                W[item2I][item1I] += 1
+                weight = weights[user] if weights else 1
+                W[item1I][item2I] += weight
+                W[item2I][item1I] += weight
 
                 # Update ratings matrix
                 item1Score = user[item1]
@@ -211,7 +212,11 @@ else:
     outputFileName = sys.argv[1]
     outputFile = "output" + os.sep + outputFileName
 
+<<<<<<< HEAD
     maxRows = 100
+=======
+    maxRows = 10
+>>>>>>> 65c4b7eef8798767635ee1c01d68d8f5b8bb9c86
     users, order = fileReader.loadTennisData(maxRows)
 
     Y, W, itemIndices = makeMatrices(users)
