@@ -11,7 +11,8 @@ def testData():
     users = [u1,u2,u3,u4,u5]
     return users
 
-def loadTennisData(maxRows):
+# weightMethod: UNIFORM, SETS, GAMES, TOURNEY
+def loadTennisData(weightMethod = "UNIFORM", maxPlayers = 10):
 
     # Read lines from file
 
@@ -37,6 +38,7 @@ def loadTennisData(maxRows):
 
     # List of match dicts: loser -> 0, winner -> log(loserGames/loserGames)
     matches = []
+    weights = []
     for line in lines:
         match = {}
 
@@ -45,6 +47,14 @@ def loadTennisData(maxRows):
         totalGames = winnerGames + loserGames
         if totalGames == 0:
             continue
+
+        winnerSets = float(line["winner_sets_won"])
+        loserSets = float(line["loser_sets_won"])
+        totalSets = winnerSets + loserSets
+
+        tourneyRoundOrder = int(line["round_order"])
+        tourneyWeight = 2 ** (1-tourneyRoundOrder)
+
         # Fraction of games won minus 0.5
         winMargin = winnerGames / (winnerGames + loserGames) - 0.5
         # winMargin = 1 # Binary
@@ -53,7 +63,7 @@ def loadTennisData(maxRows):
         winnerName = " ".join(line["winner_name"].split())
 
         # If already reached max rows, stop
-        if len(curPlayers) >= maxRows and not (loserName in curPlayers and winnerName in curPlayers):
+        if len(curPlayers) >= maxPlayers and not (loserName in curPlayers and winnerName in curPlayers):
             continue
         for name in [loserName, winnerName]:
             if name not in curPlayers:
@@ -64,4 +74,14 @@ def loadTennisData(maxRows):
         match[winnerName] = winMargin
         matches.append(match)
 
-    return matches, curPlayers
+        # Add weight
+        if weightMethod == "UNIFORM":
+            weights.append(1)
+        elif weightMethod == "SETS":
+            weights.append(totalSets)
+        elif weightMethod == "GAMES":
+            weights.append(totalGames)
+        elif weightMethod == "TOURNEY":
+            weights.append(tourneyWeight)
+
+    return matches, weights, curPlayers
