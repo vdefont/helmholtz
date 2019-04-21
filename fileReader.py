@@ -11,12 +11,25 @@ def testData():
     users = [u1,u2,u3,u4,u5]
     return users
 
-# weightMethod: UNIFORM, SETS, GAMES, TOURNEY
-def loadTennisData(weightMethod = "UNIFORM", maxPlayers = 10):
+# Returns dict with top players as keys, rank as index (starts at 0)
+def getTopItems(fileName, numItems):
+    file = open(fileName)
+    reader = csv.reader(file, delimiter = ',')
+    topItems = {}
+    curI = 0
+    for lineItems in reader:
+        name = lineItems[0]
+        nameFormatted = " ".join(name.split())
+        topItems[nameFormatted] = curI
+        curI += 1
+        if len(topItems) >= numItems:
+            break
+    return topItems
 
-    # Read lines from file
-
-    file = open('2017_matches.csv', 'r')
+# Returns list of dicts
+# Variable names provided by header in first line of file
+def readCsvFile(fileName):
+    file = open(fileName, 'r')
 
     reader = csv.reader(file, delimiter=',')
 
@@ -32,9 +45,16 @@ def loadTennisData(weightMethod = "UNIFORM", maxPlayers = 10):
             lines.append(line)
 
     file.close()
+    return lines
 
-    curPlayerI = 0
-    curPlayers = {}
+# weightMethod: UNIFORM, SETS, GAMES, TOURNEY
+def loadTennisData(weightMethod = "UNIFORM", maxPlayers = 10):
+
+    # Read lines from file
+
+    lines = readCsvFile('data/tennis/2017_matches.csv')
+
+    curPlayers = getTopItems('data/tennis/ranking', maxPlayers)
 
     # List of match dicts: loser -> 0, winner -> log(loserGames/loserGames)
     matches = []
@@ -62,13 +82,9 @@ def loadTennisData(weightMethod = "UNIFORM", maxPlayers = 10):
         loserName = " ".join(line["loser_name"].split())
         winnerName = " ".join(line["winner_name"].split())
 
-        # If already reached max rows, stop
-        if len(curPlayers) >= maxPlayers and not (loserName in curPlayers and winnerName in curPlayers):
+        # If both players aren't in our list, ignore the match
+        if not (winnerName in curPlayers and loserName in curPlayers):
             continue
-        for name in [loserName, winnerName]:
-            if name not in curPlayers:
-                curPlayers[name] = curPlayerI
-                curPlayerI += 1
 
         match[loserName] = 0.0
         match[winnerName] = winMargin
@@ -85,3 +101,29 @@ def loadTennisData(weightMethod = "UNIFORM", maxPlayers = 10):
             weights.append(tourneyWeight)
 
     return matches, weights, curPlayers
+
+def loadGolfData(maxPlayers = 10):
+
+    lines = readCsvFile('data/golf/golfData2018.csv')
+    playerIds = getTopItems('data/golf/ranking', maxPlayers)
+
+    # Dict: name -> (dict: player -> score)
+    tournaments = {}
+    for line in lines:
+        tournament = line["tournament"]
+        if tournament not in tournaments:
+            tournaments[tournament] = {}
+
+        name = line["player"]
+        nameFormatted = " ".join(name.split())
+        score = -1.0 * float(line["total"]) # Make negative: lower is better
+        
+        if nameFormatted in playerIds:
+            tournaments[tournament][name] = score
+
+    tournamentList = list(tournaments.values())
+    weights = [1.0] * len(tournamentList) # Weight all tourneys equally
+
+    return tournamentList, weights, playerIds
+
+loadGolfData()

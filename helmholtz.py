@@ -73,6 +73,41 @@ def makeMatrices(users, weights = None):
 
     return (Y, W, itemIndices)
 
+# Only keeps upper triangle of matrix
+def matrixToVec (M):
+    n = len(M)
+    vec = []
+    for i in range(n-1):
+        for j in range(i+1, n):
+            vec.append(M[i][j])
+    return np.array(vec)
+# Assumes vec is only the upper triangle
+def vecToMatrix (v):
+    n = int((1 + math.sqrt(1 + 8 * len(v))) / 2)
+    M = np.zeros((n,n))
+    c = 0
+    for i in range(n-1):
+        for j in range(i+1, n):
+            M[i][j] = v[c]
+            M[j][i] = -1 * v[c]
+            c += 1
+    return M
+
+# Returns new matrix with all 0s replaced by 1s
+# Useful when dividing, to avoid divide by 0
+def zerosToOnes (M):
+    rows = len(M)
+    if rows == 0:
+        return np.array([])
+    cols = len(M[0])
+    M2 = np.ones((rows,cols))
+    for row in range(rows):
+        for col in range(cols):
+            curVal = M[row][col]
+            if curVal != 0:
+                M2[row][col] = curVal
+    return M2
+
 # Returns solution in (im gradient) that minimizes error
 def solve(Y, W):
 
@@ -146,25 +181,30 @@ def makeCurlMatrix (numVars):
         c2 += top
 
     return M
+def makeCurlAdjoint (curlM, W):
+    weightVec = matrixToVec(W)
+    curlAdj = (curlM / zerosToOnes(np.array([weightVec]))).transpose()
+    return curlAdj
 
-# Useful for handling curl
-def matrixToVec (M):
-    n = len(M)
-    vec = []
-    for i in range(n-1):
-        for j in range(i+1, n):
-            vec.append(M[i][j])
-    return np.array(vec)
-def vecToMatrix (v):
-    n = int((1 + math.sqrt(1 + 8 * len(v))) / 2)
-    M = np.zeros((n,n))
-    c = 0
-    for i in range(n-1):
-        for j in range(i+1, n):
-            M[i][j] = v[c]
-            M[j][i] = -1 * v[c]
-            c += 1
+# Returns: map from singles to pairs
+def makeGradientMatrix (n):
+    rows = int(n * (n-1) / 2)
+    M = np.zeros((rows,n))
+    row = 0
+    c1 = 0
+    for blockSize in range(n-1,0,-1):
+        c2 = c1 + 1
+        for i in range(blockSize):
+            M[row][c1] = -1
+            M[row][c2] = 1
+            row += 1
+            c2 += 1
+        c1 += 1
     return M
+
+# Input: a matrix of weights
+def makeDivMatrix (W):
+    return makeGradientMatrix(len(W)).transpose() * -1 * matrixToVec(W)
 
 def getCurlResidualOld(Y, W):
     curlM = makeCurlMatrix(len(Y))
@@ -178,12 +218,8 @@ def getCurlResidual(Y, W):
     curlM = makeCurlMatrix(len(Y))
 
     weightVec = matrixToVec(W)
-    # Replace 0 by 1 in sqrt matrix to avoid dividing by 0
-    for i in range(len(weightVec)):
-        if weightVec[i] == 0:
-            weightVec[i] = 1
 
-    curlAdj = curlM.transpose() / np.array([weightVec]).transpose()
+    curlAdj = makeCurlAdjoint(curlM, W)
 
     # Multiply Y and curl by sqrt of weights before solving (to weight appropriately)
     Ylsqr = matrixToVec(Y) * (weightVec ** 0.5)
@@ -194,6 +230,22 @@ def getCurlResidual(Y, W):
 
     curlResidualVec = np.matmul(curlAdj, lsqrTriples)
     return vecToMatrix(curlResidualVec)
+
+def getHelmholtzian(Y, W):
+    n = len(Y)
+    curl = makeCurlMatrix(n)
+    curlAdj = makeCurlAdjoint(curl, W)
+    grad = makeGradientMatrix(n)
+    div = makeDivMatrix(W)
+    helmholtzian = np.matmul(curlAdj, curl) - np.matmul(grad, div)
+    return helmholtzian
+
+def getHarmonicResidual(Y, W):
+    n = len(Y)
+    hm = getHelmholtzian(Y, W)
+    hmAdj = np.transpose(hm / matrixToVec(zerosToOnes(W))) # Rows of adjoint will be divided by weights
+    proj = np.identity(len(hmAdj)) - np.matmul(hmAdj, hm)
+    return vecToMatrix(np.matmul(proj, matrixToVec(Y)))
 
 def writeFile(itemValues, fileName):
     sortedItems = sorted(itemValues, key=itemValues.get, reverse=True)
@@ -206,16 +258,21 @@ def writeFile(itemValues, fileName):
 pyVersion = sys.version_info[0]
 if pyVersion < 3:
     print("Please use at least python3")
-elif len(sys.argv) < 1:
+elif len(sys.argv) < 2:
     print("Please provide the following args:")
     print("- outputFile")
 else:
     outputFileName = sys.argv[1]
     outputFile = "output" + os.sep + outputFileName
 
-    weightMethod = "TOURNEY"
-    maxPlayers = 90
-    users, weights, order = fileReader.loadTennisData(weightMethod = weightMethod, maxPlayers=maxPlayers)
+    # Tennis
+    # weightMethod = "GAMES"
+    # maxPlayers = 50
+    # users, weights, order = fileReader.loadTennisData(weightMethod = weightMethod, maxPlayers=maxPlayers)
+
+    # Golf
+    maxPlayers = 80
+    users, weights, order = fileReader.loadGolfData(maxPlayers)
 
     Y, W, itemIndices = makeMatrices(users, weights)
     s = solve(Y, W)
@@ -231,9 +288,9 @@ else:
     # Solve least squares: Y = curl* X
     curlResidual = getCurlResidual(Y, W)
 
-    harmonicResidual = Y - gradientFlow - curlResidual
+    # harmonicResidual = getHarmonicResidual(Y, W)
 
     print("\nNorms:")
     print("Gradient: " + str(np.linalg.norm(gradientFlow)))
     print("Curl:     " + str(np.linalg.norm(curlResidual)))
-    print("Harmonic: " + str(np.linalg.norm(harmonicResidual)))
+    # print("Harmonic: " + str(np.linalg.norm(harmonicResidual)))
