@@ -2,6 +2,7 @@ import numpy as np
 import sys
 import math
 import csv
+import util
 
 # Returns dict with top players as keys, rank as index (starts at 0)
 def getTopTennisPlayers(numPlayers):
@@ -18,4 +19,7 @@ def getTopTennisPlayers(numPlayers):
             break
     return topPlayers
 
-print(getTopTennisPlayers(5))
+for i in range(10):
+    v = [1,1,1,1,2,3,4,5]
+    util.randomizeVector(v)
+    print(v)

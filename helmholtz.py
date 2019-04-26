@@ -5,6 +5,7 @@ import math
 import scipy.sparse.linalg
 
 import fileReader
+import util
 
 # TODO:
 # - Figure out residual flows - esp. curl
@@ -82,14 +83,15 @@ def matrixToVec (M):
             vec.append(M[i][j])
     return np.array(vec)
 # Assumes vec is only the upper triangle
-def vecToMatrix (v):
+# 'Symmetric' is either 1 (sym) or -1 (skew-sym)
+def vecToMatrix (v, symmetric=1):
     n = int((1 + math.sqrt(1 + 8 * len(v))) / 2)
     M = np.zeros((n,n))
     c = 0
     for i in range(n-1):
         for j in range(i+1, n):
             M[i][j] = v[c]
-            M[j][i] = -1 * v[c]
+            M[j][i] = symmetric * v[c]
             c += 1
     return M
 
@@ -211,7 +213,7 @@ def getCurlResidualOld(Y, W):
     curlMpInv = np.linalg.pinv(curlM)
     yVec = matrixToVec(Y)
     curlResidualVec = np.matmul(curlMpInv, np.matmul(curlM, yVec))
-    return vecToMatrix(curlResidualVec)
+    return vecToMatrix(curlResidualVec,-1)
 
 def getCurlResidual(Y, W):
 
@@ -229,7 +231,7 @@ def getCurlResidual(Y, W):
     lsqrTriples = scipy.sparse.linalg.lsqr(curlLsqr, Ylsqr)[0]
 
     curlResidualVec = np.matmul(curlAdj, lsqrTriples)
-    return vecToMatrix(curlResidualVec)
+    return vecToMatrix(curlResidualVec,-1)
 
 def getHelmholtzian(Y, W):
     n = len(Y)
@@ -245,7 +247,7 @@ def getHarmonicResidual(Y, W):
     hm = getHelmholtzian(Y, W)
     hmAdj = np.transpose(hm / matrixToVec(zerosToOnes(W))) # Rows of adjoint will be divided by weights
     proj = np.identity(len(hmAdj)) - np.matmul(hmAdj, hm)
-    return vecToMatrix(np.matmul(proj, matrixToVec(Y)))
+    return vecToMatrix(np.matmul(proj, matrixToVec(Y)),-1)
 
 def writeFile(itemValues, fileName):
     sortedItems = sorted(itemValues, key=itemValues.get, reverse=True)
@@ -255,26 +257,31 @@ def writeFile(itemValues, fileName):
             file.write(line)
             file.write('\n')
 
-pyVersion = sys.version_info[0]
-if pyVersion < 3:
-    print("Please use at least python3")
-elif len(sys.argv) < 2:
-    print("Please provide the following args:")
-    print("- outputFile")
-else:
-    outputFileName = sys.argv[1]
-    outputFile = "output" + os.sep + outputFileName
+# symmetric is 1 (sym) or -1 (skew sym)
+def makeRandomizedMatrix(M,symmetric=1):
+    v = matrixToVec(M)
+    util.randomizeVector(v)
+    return vecToMatrix(v,symmetric)
 
+def mainRoutine(outputFile):
     # Tennis
     # weightMethod = "GAMES"
     # maxPlayers = 50
     # users, weights, order = fileReader.loadTennisData(weightMethod = weightMethod, maxPlayers=maxPlayers)
 
     # Golf
-    maxPlayers = 80
-    users, weights, order = fileReader.loadGolfData(maxPlayers)
+    maxPlayers = 50
+    # users, weights, order = fileReader.loadGolfData(maxPlayers)
+    users, weights, order = fileReader.loadTennisData("GAMES", maxPlayers)
 
     Y, W, itemIndices = makeMatrices(users, weights)
+
+    # Useful for getting sense of standard dev
+    RANDOMIZE = False
+    if RANDOMIZE:
+        Y = makeRandomizedMatrix(Y,-1)
+        W = makeRandomizedMatrix(W,1)
+
     s = solve(Y, W)
     gradientFlow = gradient(s)
 
@@ -290,7 +297,23 @@ else:
 
     # harmonicResidual = getHarmonicResidual(Y, W)
 
-    print("\nNorms:")
-    print("Gradient: " + str(np.linalg.norm(gradientFlow)))
-    print("Curl:     " + str(np.linalg.norm(curlResidual)))
+    gradNorm = np.linalg.norm(gradientFlow)
+    curlNorm = np.linalg.norm(curlResidual)
     # print("Harmonic: " + str(np.linalg.norm(harmonicResidual)))
+    return gradNorm, curlNorm
+
+pyVersion = sys.version_info[0]
+if pyVersion < 3:
+    print("Please use at least python3")
+elif len(sys.argv) < 2:
+    print("Please provide the following args:")
+    print("- outputFile")
+else:
+    outputFileName = sys.argv[1]
+    outputFile = "output" + os.sep + outputFileName
+
+    for i in range(1):
+        (gradNorm, curlNorm) = mainRoutine(outputFile)
+        print(gradNorm)
+        print(curlNorm)
+        print(curlNorm/gradNorm)
