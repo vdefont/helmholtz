@@ -7,6 +7,8 @@ import scipy.sparse.linalg
 import fileReader
 import util
 
+ALMOST_ZERO = 0.00000001
+
 # TODO:
 # - Figure out residual flows - esp. curl
 # - Compare
@@ -97,17 +99,18 @@ def vecToMatrix (v, symmetric=1):
 
 # Returns new matrix with all 0s replaced by 1s
 # Useful when dividing, to avoid divide by 0
-def zerosToOnes (M):
+def replaceZeros (M):
     rows = len(M)
     if rows == 0:
         return np.array([])
     cols = len(M[0])
-    M2 = np.ones((rows,cols))
+    M2 = np.zeros((rows,cols))
     for row in range(rows):
         for col in range(cols):
             curVal = M[row][col]
-            if curVal != 0:
-                M2[row][col] = curVal
+            if curVal == 0:
+                curVal = ALMOST_ZERO
+            M2[row][col] = curVal
     return M2
 
 # Returns solution in (im gradient) that minimizes error
@@ -185,7 +188,7 @@ def makeCurlMatrix (numVars):
     return M
 def makeCurlAdjoint (curlM, W):
     weightVec = matrixToVec(W)
-    curlAdj = (curlM / zerosToOnes(np.array([weightVec]))).transpose()
+    curlAdj = curlM / np.array([weightVec]).transpose()
     return curlAdj
 
 # Returns: map from singles to pairs
@@ -203,6 +206,10 @@ def makeGradientMatrix (n):
             c2 += 1
         c1 += 1
     return M
+def makeGradientAdjoint (gradM, W):
+    weightVec = matrixToVec(W)
+    gradAdj = curlM * np.array([weightVec])
+    return curlAdj
 
 # Input: a matrix of weights
 def makeDivMatrix (W):
@@ -275,6 +282,7 @@ def mainRoutine(outputFile):
     users, weights, order = fileReader.loadTennisData("GAMES", maxPlayers)
 
     Y, W, itemIndices = makeMatrices(users, weights)
+    replaceZeros(W) # Make zero weights close to zero - avoids divide by zero
 
     # Useful for getting sense of standard dev
     RANDOMIZE = False
