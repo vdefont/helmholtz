@@ -7,7 +7,7 @@ import scipy.sparse.linalg
 import fileReader
 import util
 
-ALMOST_ZERO = 0.00000001
+ALMOST_ZERO = 0.00000000001
 
 # TODO:
 # - Figure out residual flows - esp. curl
@@ -23,21 +23,24 @@ ALMOST_ZERO = 0.00000001
 # - Comparison matrix (skew-symmetric)
 # - Weight matrix (symmetric)
 # - Item indices
-def makeMatrices(users, weights = None):
+def makeMatrices(users, weights = None, itemIndices = None):
 
     # Compile a list of all items that were compared
-    itemIndices = {}
-    curI = 0
-    for user in users:
-        if len(user) > 1: # If 1 or less, then no comparisons were made
-            for item in user:
-                if item not in itemIndices:
-                    itemIndices[item] = curI
-                    curI += 1
+    if itemIndices is None:
+        itemIndices = {}
+        curI = 0
+        for user in users:
+            if len(user) > 1: # If 1 or less, then no comparisons were made
+                for item in user:
+                    if item not in itemIndices:
+                        itemIndices[item] = curI
+                        curI += 1
 
     numItems = len(itemIndices)
-    Y = np.array([[0.0] * numItems] * numItems) # Comparison matrix
-    W = np.array([[0.0] * numItems] * numItems) # Weight matrix
+    dims = (numItems, numItems)
+    Y = np.zeros(dims) # Comparison matrix
+    W = np.zeros(dims) # Weight matrix
+    Counts = np.zeros(dims) # Count number of entries at each index (i,j)
 
     # Add user data to comparison and weight matrix
     for userI in range(len(users)):
@@ -63,16 +66,16 @@ def makeMatrices(users, weights = None):
                 Y[item1I][item2I] += item2Score - item1Score
                 Y[item2I][item1I] += item1Score - item2Score
 
+                # Update counts matrix
+                Counts[item1I][item2I] += 1
+                Counts[item2I][item1I] += 1
 
-    Y = np.array(Y)
-    W = np.array(W)
-
-    # Divide Y by weights
+    # Average Y - divide by counts
     for i in range(numItems):
         for j in range(numItems):
-            curW = W[i][j]
-            if curW != 0:
-                Y[i][j] /= curW
+            curCount = Counts[i][j]
+            if curCount != 0:
+                Y[i][j] /= curCount
 
     return (Y, W, itemIndices)
 
@@ -99,18 +102,27 @@ def vecToMatrix (v, symmetric=1):
 
 # Returns new matrix with all 0s replaced by 1s
 # Useful when dividing, to avoid divide by 0
-def replaceZeros (M):
-    rows = len(M)
-    if rows == 0:
-        return np.array([])
-    cols = len(M[0])
-    M2 = np.zeros((rows,cols))
-    for row in range(rows):
-        for col in range(cols):
+def replaceZeros (M,replacement=1):
+
+    # Initialize new matrix
+    dims = M.shape
+    M2 = np.zeros(dims)
+
+    # If 1D array
+    if len(dims) == 1:
+        for i in range(dims[0]):
             curVal = M[row][col]
             if curVal == 0:
-                curVal = ALMOST_ZERO
-            M2[row][col] = curVal
+                curVal = replacement
+            M2[i] = curVal
+    # If 2D array
+    elif len(dims) == 2:
+        for row in range(dims[0]):
+            for col in range(dims[1]):
+                curVal = M[row][col]
+                if curVal == 0:
+                    curVal = replacement
+                M2[row][col] = curVal
     return M2
 
 # Returns solution in (im gradient) that minimizes error
@@ -188,7 +200,7 @@ def makeCurlMatrix (numVars):
     return M
 def makeCurlAdjoint (curlM, W):
     weightVec = matrixToVec(W)
-    curlAdj = curlM.transpose() / np.array([weightVec]).transpose()
+    curlAdj = curlM.transpose() / replaceZeros(np.array([weightVec])).transpose()
     return curlAdj
 
 # Returns: map from singles to pairs
@@ -225,7 +237,6 @@ def getCurlResidual(Y, W):
 
     # Solve
     lsqrTriples = scipy.sparse.linalg.lsqr(curlLsqr, Ylsqr)[0]
-
     curlResidualVec = np.matmul(curlAdj, lsqrTriples)
     return vecToMatrix(curlResidualVec,-1)
 
@@ -235,7 +246,7 @@ def getHelmholtzian(Y, W):
     curlAdj = makeCurlAdjoint(curl, W)
     grad = makeGradientMatrix(n)
     gradAdj = makeGradientAdjoint(grad, W)
-    helmholtzian = np.matmul(curlAdj, curl) - np.matmul(grad, gradAdj)
+    helmholtzian = np.matmul(curlAdj, curl) + np.matmul(grad, gradAdj)
     return helmholtzian
 
 def getHarmonicResidual(Y, W):
@@ -243,12 +254,16 @@ def getHarmonicResidual(Y, W):
 
     weightVec = matrixToVec(W)
     Dpos = np.diag(weightVec ** 0.5)
-    Dneg = np.diag(weightVec ** -0.5)
+    Dneg = np.zeros(Dpos.shape)
+    for i in range(len(Dpos)):
+        curVal = Dpos[i][i]
+        if curVal != 0:
+            Dneg[i][i] = 1 / curVal
 
     S2 = np.matmul(Dpos, np.matmul(S, Dneg))
     S2inv = np.linalg.pinv(S2)
 
-    proj = np.matmul(np.matmul(Dneg, S2inv), np.matmul(S2, Dpos))
+    proj = np.matmul(np.matmul(Dneg,S2inv), np.matmul(S2, Dpos))
 
     yVec = matrixToVec(Y)
     harmResidVec = np.matmul(proj, yVec)
@@ -270,20 +285,15 @@ def makeRandomizedMatrix(M,symmetric=1):
     util.randomizeVector(v)
     return vecToMatrix(v,symmetric)
 
-def mainRoutine(outputFile):
-    # Tennis
-    # weightMethod = "GAMES"
-    # maxPlayers = 50
-    # users, weights, order = fileReader.loadTennisData(weightMethod = weightMethod, maxPlayers=maxPlayers)
+# Returns Y, W, Grad, Curl, Harm flows
+def getFlows(data):
+    # Unpack args
+    (users, weights, order) = data
 
-    # Golf
-    maxPlayers = 10
-    # users, weights, order = fileReader.loadGolfData(maxPlayers)
-    users, weights, order = fileReader.loadTennisData("GAMES", maxPlayers)
-    # users, weights, order = fileReader.testData()
+    Y, W, itemIndices = makeMatrices(users, weights, order)
 
-    Y, W, itemIndices = makeMatrices(users, weights)
-    W = replaceZeros(W) # Make zero weights close to zero - avoids divide by zero
+    W = replaceZeros(W,ALMOST_ZERO)
+    print(W)
 
     # Useful for getting sense of standard dev
     RANDOMIZE = False
@@ -297,18 +307,8 @@ def mainRoutine(outputFile):
     curlResidual = getCurlResidual(Y, W)
     harmonicResidual = getHarmonicResidual(Y, W)
 
-    print("~~ GRAD ~~")
-    print(gradientFlow)
-    print("~~ CURL ~~")
-    print(curlResidual)
-    print("GRAD + CURL")
-    print(gradientFlow + curlResidual)
-    print("~~ HARM ~~")
-    print(harmonicResidual)
-    print("~~ SUM  ~~")
-    print(gradientFlow + curlResidual + harmonicResidual)
-    print("~~ Y    ~~")
-    print(Y*2)
+    # TODO remove - temporary override harm flow calc
+    harmonicResidual = Y - gradientFlow - curlResidual
 
     # Associate items to values
     itemValues = {}
@@ -316,6 +316,27 @@ def mainRoutine(outputFile):
         itemValues[item] = s[itemIndices[item]]
 
     writeFile(itemValues, outputFile)
+
+
+    gvec = matrixToVec(gradientFlow)
+    cvec = matrixToVec(curlResidual)
+    hvec = matrixToVec(harmonicResidual)
+    wvec = matrixToVec(W)
+    print("\nG")
+    print(gvec)
+    print("\nC")
+    print(cvec)
+    print("\nH")
+    print(hvec)
+    print("\nW")
+    print(wvec)
+
+    print("\nDot products in W-space -- should be 0 (orthogonal flows)")
+    print("g c -- " + str(sum(gvec * cvec * wvec)))
+    print("g h -- " + str(sum(gvec * hvec * wvec)))
+    print("c h -- " + str(sum(cvec * hvec * wvec)))
+
+    return Y, W, gradientFlow, curlResidual, harmonicResidual
 
 pyVersion = sys.version_info[0]
 if pyVersion < 3:
@@ -327,4 +348,24 @@ else:
     outputFileName = sys.argv[1]
     outputFile = "output" + os.sep + outputFileName
 
-    mainRoutine(outputFile)
+    # Tennis
+    # weightMethod = "GAMES"
+    # maxPlayers = 50
+    # users, weights, order = fileReader.loadTennisData(weightMethod = weightMethod, maxPlayers=maxPlayers)
+
+    # Golf
+    maxPlayers = 10
+    # data = fileReader.loadGolfData(maxPlayers)
+    # data = fileReader.loadTennisData("GAMES", maxPlayers)
+    data = fileReader.testData2()
+
+    Y, W, G, C, H = getFlows(data)
+
+    normsSquared = {}
+    normsSquared["Y"] = sum(sum(Y * Y * W))
+    normsSquared["G"] = sum(sum(G * G * W))
+    normsSquared["C"] = sum(sum(C * C * W))
+    normsSquared["H"] = sum(sum(H * H * W))
+    print("\nNorms Squared:")
+    for k in normsSquared:
+        print(k + ": " + str(normsSquared[k]))

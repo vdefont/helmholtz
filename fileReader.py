@@ -14,6 +14,28 @@ def testData():
     items = {"A":0,"B":1,"C":2,"D":3,"E":4,"F":5}
     return users, weights, items
 
+def testData2():
+    u1 = {"A":0,"B":1}
+    u2 = {"B":0,"C":2}
+    u3 = {"C":0,"A":3}
+    u4 = {"B":0,"D":4}
+    users = [u1,u2,u3,u4]
+    weights = [1,2,3,4]
+    items = {"A":0,"B":1,"C":2,"D":3}
+    return users, weights, items
+
+def testData3():
+    u1 = {"A":0,"B":2}
+    u2 = {"A":0,"C":3}
+    u3 = {"B":2,"C":3}
+    u4 = {"D":6,"A":0.5}
+    u5 = {"D":6,"B":1.5}
+    u6 = {"D":6,"C":3.5}
+    users = [u1,u2,u3,u4,u5,u6]
+    weights = None
+    items = {"A":0,"B":1,"C":2,"D":3}
+    return users, weights, items
+
 # Returns dict with top players as keys, rank as index (starts at 0)
 def getTopItems(fileName, numItems):
     file = open(fileName)
