@@ -133,7 +133,7 @@ def solve(Y, W):
 
     return s
 
-def gradient (vec):
+def getGradientFlow (vec):
     n = len(vec)
     M = np.zeros((n,n))
     for i in range(n-1):
@@ -188,7 +188,7 @@ def makeCurlMatrix (numVars):
     return M
 def makeCurlAdjoint (curlM, W):
     weightVec = matrixToVec(W)
-    curlAdj = curlM / np.array([weightVec]).transpose()
+    curlAdj = curlM.transpose() / np.array([weightVec]).transpose()
     return curlAdj
 
 # Returns: map from singles to pairs
@@ -208,19 +208,8 @@ def makeGradientMatrix (n):
     return M
 def makeGradientAdjoint (gradM, W):
     weightVec = matrixToVec(W)
-    gradAdj = curlM * np.array([weightVec])
-    return curlAdj
-
-# Input: a matrix of weights
-def makeDivMatrix (W):
-    return makeGradientMatrix(len(W)).transpose() * -1 * matrixToVec(W)
-
-def getCurlResidualOld(Y, W):
-    curlM = makeCurlMatrix(len(Y))
-    curlMpInv = np.linalg.pinv(curlM)
-    yVec = matrixToVec(Y)
-    curlResidualVec = np.matmul(curlMpInv, np.matmul(curlM, yVec))
-    return vecToMatrix(curlResidualVec,-1)
+    gradAdj = gradM.transpose() * np.array([weightVec])
+    return gradAdj
 
 def getCurlResidual(Y, W):
 
@@ -245,16 +234,27 @@ def getHelmholtzian(Y, W):
     curl = makeCurlMatrix(n)
     curlAdj = makeCurlAdjoint(curl, W)
     grad = makeGradientMatrix(n)
-    div = makeDivMatrix(W)
-    helmholtzian = np.matmul(curlAdj, curl) - np.matmul(grad, div)
+    gradAdj = makeGradientAdjoint(grad, W)
+    helmholtzian = np.matmul(curlAdj, curl) - np.matmul(grad, gradAdj)
     return helmholtzian
 
 def getHarmonicResidual(Y, W):
-    n = len(Y)
-    hm = getHelmholtzian(Y, W)
-    hmAdj = np.transpose(hm / matrixToVec(zerosToOnes(W))) # Rows of adjoint will be divided by weights
-    proj = np.identity(len(hmAdj)) - np.matmul(hmAdj, hm)
-    return vecToMatrix(np.matmul(proj, matrixToVec(Y)),-1)
+    S = getHelmholtzian(Y, W)
+
+    weightVec = matrixToVec(W)
+    Dpos = np.diag(weightVec ** 0.5)
+    Dneg = np.diag(weightVec ** -0.5)
+
+    S2 = np.matmul(Dpos, np.matmul(S, Dneg))
+    S2inv = np.linalg.pinv(S2)
+
+    proj = np.matmul(np.matmul(Dneg, S2inv), np.matmul(S2, Dpos))
+
+    yVec = matrixToVec(Y)
+    harmResidVec = np.matmul(proj, yVec)
+    harmResid = vecToMatrix(harmResidVec, symmetric=-1) # Skew-symmetric
+
+    return harmResid
 
 def writeFile(itemValues, fileName):
     sortedItems = sorted(itemValues, key=itemValues.get, reverse=True)
@@ -277,12 +277,13 @@ def mainRoutine(outputFile):
     # users, weights, order = fileReader.loadTennisData(weightMethod = weightMethod, maxPlayers=maxPlayers)
 
     # Golf
-    maxPlayers = 50
+    maxPlayers = 10
     # users, weights, order = fileReader.loadGolfData(maxPlayers)
     users, weights, order = fileReader.loadTennisData("GAMES", maxPlayers)
+    # users, weights, order = fileReader.testData()
 
     Y, W, itemIndices = makeMatrices(users, weights)
-    replaceZeros(W) # Make zero weights close to zero - avoids divide by zero
+    W = replaceZeros(W) # Make zero weights close to zero - avoids divide by zero
 
     # Useful for getting sense of standard dev
     RANDOMIZE = False
@@ -290,8 +291,24 @@ def mainRoutine(outputFile):
         Y = makeRandomizedMatrix(Y,-1)
         W = makeRandomizedMatrix(W,1)
 
+    # Get three flows
     s = solve(Y, W)
-    gradientFlow = gradient(s)
+    gradientFlow = getGradientFlow(s)
+    curlResidual = getCurlResidual(Y, W)
+    harmonicResidual = getHarmonicResidual(Y, W)
+
+    print("~~ GRAD ~~")
+    print(gradientFlow)
+    print("~~ CURL ~~")
+    print(curlResidual)
+    print("GRAD + CURL")
+    print(gradientFlow + curlResidual)
+    print("~~ HARM ~~")
+    print(harmonicResidual)
+    print("~~ SUM  ~~")
+    print(gradientFlow + curlResidual + harmonicResidual)
+    print("~~ Y    ~~")
+    print(Y*2)
 
     # Associate items to values
     itemValues = {}
@@ -299,16 +316,6 @@ def mainRoutine(outputFile):
         itemValues[item] = s[itemIndices[item]]
 
     writeFile(itemValues, outputFile)
-
-    # Solve least squares: Y = curl* X
-    curlResidual = getCurlResidual(Y, W)
-
-    # harmonicResidual = getHarmonicResidual(Y, W)
-
-    gradNorm = np.linalg.norm(gradientFlow)
-    curlNorm = np.linalg.norm(curlResidual)
-    # print("Harmonic: " + str(np.linalg.norm(harmonicResidual)))
-    return gradNorm, curlNorm
 
 pyVersion = sys.version_info[0]
 if pyVersion < 3:
@@ -320,8 +327,4 @@ else:
     outputFileName = sys.argv[1]
     outputFile = "output" + os.sep + outputFileName
 
-    for i in range(1):
-        (gradNorm, curlNorm) = mainRoutine(outputFile)
-        print(gradNorm)
-        print(curlNorm)
-        print(curlNorm/gradNorm)
+    mainRoutine(outputFile)

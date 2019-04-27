@@ -3,13 +3,16 @@ import math
 
 # Returns a list of users. Each user is a dict of item ratings
 def testData():
-    u1 = {"A":5, "B":4, "C":3}
-    u2 = {"B":2}
-    u3 = {"A":4, "B":3}
-    u4 = {"B":4, "C":2}
-    u5 = {"B":5, "C":2}
-    users = [u1,u2,u3,u4,u5]
-    return users
+    u1 = {"A":3, "B":1}
+    u2 = {"A":7, "C":6}
+    u3 = {"A":5, "D":0}
+    u4 = {"B":2, "C":1}
+    u5 = {"B":9, "D":8}
+    u6 = {"C":1, "D":3}
+    users = [u1,u2,u3,u4,u5,u6]
+    weights = [2,1,4,3,0,5]
+    items = {"A":0,"B":1,"C":2,"D":3,"E":4,"F":5}
+    return users, weights, items
 
 # Returns dict with top players as keys, rank as index (starts at 0)
 def getTopItems(fileName, numItems):
@@ -117,7 +120,7 @@ def loadGolfData(maxPlayers = 10):
         name = line["player"]
         nameFormatted = " ".join(name.split())
         score = -1.0 * float(line["total"]) # Make negative: lower is better
-        
+
         if nameFormatted in playerIds:
             tournaments[tournament][name] = score
 
