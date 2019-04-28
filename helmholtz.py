@@ -7,18 +7,6 @@ import scipy.sparse.linalg
 import fileReader
 import util
 
-ALMOST_ZERO = 0.00000000001
-
-# TODO:
-# - Figure out residual flows - esp. curl
-# - Compare
-#   - to rankings online (chrome bookmark)
-#   - to PCA
-# - diff. methods
-#   - Try different winMargin methods in fileReader (ex: binary)
-#   - weight more for most recent dates?
-#   - Try different averaging mechanisms
-
 # Returns:
 # - Comparison matrix (skew-symmetric)
 # - Weight matrix (symmetric)
@@ -87,43 +75,6 @@ def matrixToVec (M):
         for j in range(i+1, n):
             vec.append(M[i][j])
     return np.array(vec)
-# Assumes vec is only the upper triangle
-# 'Symmetric' is either 1 (sym) or -1 (skew-sym)
-def vecToMatrix (v, symmetric=1):
-    n = int((1 + math.sqrt(1 + 8 * len(v))) / 2)
-    M = np.zeros((n,n))
-    c = 0
-    for i in range(n-1):
-        for j in range(i+1, n):
-            M[i][j] = v[c]
-            M[j][i] = symmetric * v[c]
-            c += 1
-    return M
-
-# Returns new matrix with all 0s replaced by 1s
-# Useful when dividing, to avoid divide by 0
-def replaceZeros (M,replacement=1):
-
-    # Initialize new matrix
-    dims = M.shape
-    M2 = np.zeros(dims)
-
-    # If 1D array
-    if len(dims) == 1:
-        for i in range(dims[0]):
-            curVal = M[row][col]
-            if curVal == 0:
-                curVal = replacement
-            M2[i] = curVal
-    # If 2D array
-    elif len(dims) == 2:
-        for row in range(dims[0]):
-            for col in range(dims[1]):
-                curVal = M[row][col]
-                if curVal == 0:
-                    curVal = replacement
-                M2[row][col] = curVal
-    return M2
 
 # Returns solution in (im gradient) that minimizes error
 def solve(Y, W):
@@ -145,15 +96,20 @@ def solve(Y, W):
 
     return s
 
-def getGradientFlow (vec):
+def getGradientFlow (vec, wFull):
+
+    gradientFlow = []
+
     n = len(vec)
-    M = np.zeros((n,n))
+    ij = 0
     for i in range(n-1):
         for j in range(i+1, n):
-            diff = vec[j] - vec[i]
-            M[i][j] = diff
-            M[j][i] = -1 * diff
-    return M
+            if wFull[ij] != 0:
+                diff = vec[j] - vec[i]
+                gradientFlow.append(diff)
+            ij += 1
+
+    return np.array(gradientFlow)
 
 def doubleCumSum (n):
     sum = 0
@@ -198,10 +154,8 @@ def makeCurlMatrix (numVars):
         c2 += top
 
     return M
-def makeCurlAdjoint (curlM, W):
-    weightVec = matrixToVec(W)
-    curlAdj = curlM.transpose() / replaceZeros(np.array([weightVec])).transpose()
-    return curlAdj
+def makeCurlAdjoint (curlM, w):
+    return (curlM / w).transpose()
 
 # Returns: map from singles to pairs
 def makeGradientMatrix (n):
@@ -218,58 +172,44 @@ def makeGradientMatrix (n):
             c2 += 1
         c1 += 1
     return M
-def makeGradientAdjoint (gradM, W):
-    weightVec = matrixToVec(W)
-    gradAdj = gradM.transpose() * np.array([weightVec])
-    return gradAdj
+def makeGradientAdjoint (gradM, w):
+    return gradM.transpose() * w
 
-def getCurlResidual(Y, W):
+def getCurlResidual(y, w, n, wFull):
 
-    curlM = makeCurlMatrix(len(Y))
-
-    weightVec = matrixToVec(W)
-
-    curlAdj = makeCurlAdjoint(curlM, W)
+    curlM = removeZeroEdges(makeCurlMatrix(n), wFull, dim=1)
+    curlAdj = makeCurlAdjoint(curlM, w)
 
     # Multiply Y and curl by sqrt of weights before solving (to weight appropriately)
-    Ylsqr = matrixToVec(Y) * (weightVec ** 0.5)
-    curlLsqr = curlAdj * np.array([weightVec ** 0.5]).transpose()
+    yLsqr = y * (w ** 0.5)
+    curlLsqr = curlAdj * np.array([w ** 0.5]).transpose()
 
     # Solve
-    lsqrTriples = scipy.sparse.linalg.lsqr(curlLsqr, Ylsqr)[0]
-    curlResidualVec = np.matmul(curlAdj, lsqrTriples)
-    return vecToMatrix(curlResidualVec,-1)
+    lsqrTriples = scipy.sparse.linalg.lsqr(curlLsqr, yLsqr)[0]
+    curlResidual = np.matmul(curlAdj, lsqrTriples)
+    return curlResidual
 
-def getHelmholtzian(Y, W):
-    n = len(Y)
-    curl = makeCurlMatrix(n)
-    curlAdj = makeCurlAdjoint(curl, W)
-    grad = makeGradientMatrix(n)
-    gradAdj = makeGradientAdjoint(grad, W)
+def getHelmholtzian(y, w, n, wFull):
+    curl = removeZeroEdges(makeCurlMatrix(n), wFull, dim=1)
+    curlAdj = makeCurlAdjoint(curl, w)
+    grad = removeZeroEdges(makeGradientMatrix(n), wFull, dim=0)
+    gradAdj = makeGradientAdjoint(grad, w)
     helmholtzian = np.matmul(curlAdj, curl) + np.matmul(grad, gradAdj)
     return helmholtzian
 
-def getHarmonicResidual(Y, W):
-    S = getHelmholtzian(Y, W)
+def getHarmonicResidual(y, w, n, wFull):
+    S = getHelmholtzian(y, w, n, wFull)
 
-    weightVec = matrixToVec(W)
-    Dpos = np.diag(weightVec ** 0.5)
-    Dneg = np.zeros(Dpos.shape)
-    for i in range(len(Dpos)):
-        curVal = Dpos[i][i]
-        if curVal != 0:
-            Dneg[i][i] = 1 / curVal
+    Dpos = np.diag(w ** 0.5)
+    Dneg = np.diag(w ** -0.5)
 
     S2 = np.matmul(Dpos, np.matmul(S, Dneg))
     S2inv = np.linalg.pinv(S2)
 
     proj = np.matmul(np.matmul(Dneg,S2inv), np.matmul(S2, Dpos))
 
-    yVec = matrixToVec(Y)
-    harmResidVec = np.matmul(proj, yVec)
-    harmResid = vecToMatrix(harmResidVec, symmetric=-1) # Skew-symmetric
-
-    return harmResid
+    harmonicResidual = np.matmul(proj, y)
+    return harmonicResidual
 
 def writeFile(itemValues, fileName):
     sortedItems = sorted(itemValues, key=itemValues.get, reverse=True)
@@ -279,36 +219,54 @@ def writeFile(itemValues, fileName):
             file.write(line)
             file.write('\n')
 
-# symmetric is 1 (sym) or -1 (skew sym)
-def makeRandomizedMatrix(M,symmetric=1):
-    v = matrixToVec(M)
-    util.randomizeVector(v)
-    return vecToMatrix(v,symmetric)
+# Remove entries where weight is 0
+# dim: 0 is rows, 1 is cols
+def removeZeroEdges(x, wFull, dim=0):
+
+    x2 = []
+
+    for i in range(len(wFull)):
+        if wFull[i] != 0:
+
+            # 1D array or removing rows
+            if len(x.shape) == 1 or dim == 0:
+                x2.append(x[i])
+            # Removing cols
+            else:
+                x2.append(x[:,i])
+
+    x2 = np.array(x2)
+    if dim == 1:
+        x2 = x2.transpose()
+    return x2
 
 # Returns Y, W, Grad, Curl, Harm flows
-def getFlows(data):
+# - randomize=True - performs bootstrapping to randomly sample data
+# - verbose=True - prints out details about 3 flows
+def getFlows(data, randomize=False, verbose=False):
     # Unpack args
     (users, weights, order) = data
 
     Y, W, itemIndices = makeMatrices(users, weights, order)
+    n = len(Y)
+    yFull = matrixToVec(Y)
+    wFull = matrixToVec(W)
 
-    W = replaceZeros(W,ALMOST_ZERO)
-    print(W)
+    if randomize:
+        util.randomizeVector(yFull)
+        util.randomizeVector(wFull)
 
-    # Useful for getting sense of standard dev
-    RANDOMIZE = False
-    if RANDOMIZE:
-        Y = makeRandomizedMatrix(Y,-1)
-        W = makeRandomizedMatrix(W,1)
+    y = removeZeroEdges(yFull, wFull)
+    w = removeZeroEdges(wFull, wFull)
 
     # Get three flows
     s = solve(Y, W)
-    gradientFlow = getGradientFlow(s)
-    curlResidual = getCurlResidual(Y, W)
-    harmonicResidual = getHarmonicResidual(Y, W)
+    gradientFlow = getGradientFlow(s, wFull)
+    curlResidual = getCurlResidual(y, w, n, wFull)
+    harmonicResidual = getHarmonicResidual(y, w, n, wFull)
 
     # TODO remove - temporary override harm flow calc
-    harmonicResidual = Y - gradientFlow - curlResidual
+    # harmonicResidual = Y - gradientFlow - curlResidual
 
     # Associate items to values
     itemValues = {}
@@ -317,26 +275,27 @@ def getFlows(data):
 
     writeFile(itemValues, outputFile)
 
+    if verbose:
+        print("\nG")
+        print(gradientFlow)
+        print("\nC")
+        print(curlResidual)
+        print("\nH")
+        print(harmonicResidual)
+        print("\nW")
+        print(w)
 
-    gvec = matrixToVec(gradientFlow)
-    cvec = matrixToVec(curlResidual)
-    hvec = matrixToVec(harmonicResidual)
-    wvec = matrixToVec(W)
-    print("\nG")
-    print(gvec)
-    print("\nC")
-    print(cvec)
-    print("\nH")
-    print(hvec)
-    print("\nW")
-    print(wvec)
+        print("\nDot products in W-space -- should be 0 (orthogonal flows)")
+        print("g c -- " + str(sum(gradientFlow * curlResidual * w)))
+        print("g h -- " + str(sum(gradientFlow * harmonicResidual * w)))
+        print("c h -- " + str(sum(curlResidual * harmonicResidual * w)))
 
-    print("\nDot products in W-space -- should be 0 (orthogonal flows)")
-    print("g c -- " + str(sum(gvec * cvec * wvec)))
-    print("g h -- " + str(sum(gvec * hvec * wvec)))
-    print("c h -- " + str(sum(cvec * hvec * wvec)))
+    return y, w, gradientFlow, curlResidual, harmonicResidual
 
-    return Y, W, gradientFlow, curlResidual, harmonicResidual
+def getSquaredNorm(v, innerProd=None):
+    if innerProd is None:
+        return sum(v * v)
+    return sum(v * v * innerProd)
 
 pyVersion = sys.version_info[0]
 if pyVersion < 3:
@@ -351,21 +310,25 @@ else:
     # Tennis
     # weightMethod = "GAMES"
     # maxPlayers = 50
-    # users, weights, order = fileReader.loadTennisData(weightMethod = weightMethod, maxPlayers=maxPlayers)
+    # data = fileReader.loadTennisData(weightMethod = weightMethod, maxPlayers=maxPlayers)
 
     # Golf
-    maxPlayers = 10
+    # maxPlayers = 10
     # data = fileReader.loadGolfData(maxPlayers)
-    # data = fileReader.loadTennisData("GAMES", maxPlayers)
+
+    # Test
     data = fileReader.testData2()
 
-    Y, W, G, C, H = getFlows(data)
+    # print("G\t\t\tC\t\t\tH")
 
-    normsSquared = {}
-    normsSquared["Y"] = sum(sum(Y * Y * W))
-    normsSquared["G"] = sum(sum(G * G * W))
-    normsSquared["C"] = sum(sum(C * C * W))
-    normsSquared["H"] = sum(sum(H * H * W))
-    print("\nNorms Squared:")
-    for k in normsSquared:
-        print(k + ": " + str(normsSquared[k]))
+    randomize=False
+    for i in range(1):
+        y, w, g, c, h = getFlows(data, randomize=randomize, verbose=True)
+        randomize=True # Randomize everything after first one
+
+        yNorm = getSquaredNorm(y, w)
+        gNorm = getSquaredNorm(g, w)
+        cNorm = getSquaredNorm(c, w)
+        hNorm = getSquaredNorm(h, w)
+
+        print(str(gNorm/yNorm) + "\t" + str(cNorm/yNorm) + "\t" + str(hNorm/yNorm))
