@@ -36,6 +36,30 @@ def testData3():
     items = {"A":0,"B":1,"C":2,"D":3}
     return users, weights, items
 
+def testData4():
+    u1 = {"A":0,"B":1}
+    u2 = {"A":0,"C":-3}
+    u4 = {"B":0,"C":2}
+    u5 = {"B":0,"D":4}
+    u6 = {"C":0,"D":1}
+    users = [u1,u2,u4,u5,u6]
+    weights = [5,7,6,8,5]
+    items = {"A":0,"B":1,"C":2,"D":3}
+    return users, weights, items
+
+# Same as test4, except with no zero edges 
+def testData5():
+    u1 = {"A":0,"B":1}
+    u2 = {"A":0,"C":-3}
+    u3 = {"A":0,"D":1}
+    u4 = {"B":0,"C":2}
+    u5 = {"B":0,"D":4}
+    u6 = {"C":0,"D":1}
+    users = [u1,u2,u3,u4,u5,u6]
+    weights = [5,7,5,6,8,5]
+    items = {"A":0,"B":1,"C":2,"D":3}
+    return users, weights, items
+
 # Returns dict with top players as keys, rank as index (starts at 0)
 def getTopItems(fileName, numItems):
     file = open(fileName)

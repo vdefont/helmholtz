@@ -2,6 +2,41 @@ import numpy as np
 import random
 import matplotlib.pyplot as plt
 
+# Multiplies a chain of matrices, right to left
+def multiplyMatrices(matrices):
+    matrices.reverse()
+    M = np.matmul(matrices[1], matrices[0])
+    for i in range(2, len(matrices)):
+        M = np.matmul(matrices[i], M)
+    return M
+
+# v1, v2 are vectors
+# w are weights
+def innerProd(v1, v2, w=None):
+    if w is None:
+        return sum(v1 * v2)
+    return sum(v1 * v2 * w)
+
+# Remove entries where weight is 0
+# dim: 0 is rows, 1 is cols
+def removeZeroEdges(x, wFull, dim=0):
+
+    x2 = []
+
+    for i in range(len(wFull)):
+        if wFull[i] != 0:
+
+            # 1D array or removing rows
+            if len(x.shape) == 1 or dim == 0:
+                x2.append(x[i])
+            # Removing cols
+            else:
+                x2.append(x[:,i])
+
+    x2 = np.array(x2)
+    if dim == 1:
+        x2 = x2.transpose()
+    return x2
 
 # Draws with replacement - mutates
 def randomizeVector(v):
