@@ -173,8 +173,9 @@ def getGradFlow(matrices):
     y, w, grad, gradAdj, curl, curlAdj = matrices
 
     lapInv = np.linalg.pinv(np.matmul(gradAdj, grad)) # Inv of laplacian
-    gradFlow = util.multiplyMatrices([grad, lapInv, gradAdj, y])
-    return gradFlow
+    s = util.multiplyMatrices([lapInv, gradAdj, y])
+    gradFlow = np.matmul(grad, s)
+    return gradFlow, s
 
 def getCurlFlow(matrices):
     y, w, grad, gradAdj, curl, curlAdj = matrices
@@ -197,6 +198,18 @@ def getHarmFlow(matrices):
     harmFlow = y - util.multiplyMatrices([Dneg, S2pinv, S2, Dpos, y])
 
     return harmFlow
+
+def writeItemScoresToFile(s, itemIndices, fileName):
+    itemValues = {}
+    for item in itemIndices:
+        itemValues[item] = s[itemIndices[item]]
+
+    sortedItems = sorted(itemValues, key=itemValues.get, reverse=True)
+    with open(fileName, 'w') as file:
+        for sortedItem in sortedItems:
+            line = ",".join([sortedItem, str(itemValues[sortedItem])])
+            file.write(line)
+            file.write('\n')
 
 # Returns Y, W, Grad, Curl, Harm flows
 # - randomize=True - performs bootstrapping to randomly sample data
@@ -226,9 +239,11 @@ def getFlows(data, randomize=False):
     curlAdj = makeCurlAdjoint(curl, w)
 
     matrices = (y, w, grad, gradAdj, curl, curlAdj)
-    gradFlow = getGradFlow(matrices)
+    gradFlow, s = getGradFlow(matrices)
     curlFlow = getCurlFlow(matrices)
     harmFlow = getHarmFlow(matrices)
+
+    # writeItemScoresToFile(s, itemIndices, "output/chess/ranking.csv")
 
     return y, w, gradFlow, curlFlow, harmFlow
 
@@ -237,18 +252,26 @@ if pyVersion < 3:
     print("Please use at least python3")
 else:
     # Tennis
-    weightMethod = "GAMES"
-    maxPlayers = 50
-    data = fileReader.loadTennisData(weightMethod = weightMethod, maxPlayers=maxPlayers)
+    # weightMethod = "GAMES"
+    # maxPlayers = 50
+    # data = fileReader.loadTennisData(weightMethod = weightMethod, maxPlayers=maxPlayers)
 
     # Test
     # data = fileReader.testData4()
 
+    # Chess
+    maxPlayers = 50
+    data = fileReader.loadChessData(50)
+
+    print("NOTE: First one is real. Rest are random.")
     print("Gradient\tCurl\t\tHarmonic")
 
-    y, w, gradFlow, curlFlow, harmFlow = getFlows(data)
-    yNormSq = util.innerProd(y, y, w)
-    gNormSq = "%4f" % (util.innerProd(gradFlow, gradFlow, w) / yNormSq)
-    cNormSq = "%4f" % (util.innerProd(curlFlow, curlFlow, w) / yNormSq)
-    hNormSq = "%4f" % (util.innerProd(harmFlow, harmFlow, w) / yNormSq)
-    print(gNormSq + "\t" + cNormSq + "\t" + hNormSq)
+    randomize=False
+    for i in range(201):
+        y, w, gradFlow, curlFlow, harmFlow = getFlows(data, randomize=randomize)
+        randomize=True
+        yNormSq = util.innerProd(y, y, w)
+        gNormSq = "%4f" % (util.innerProd(gradFlow, gradFlow, w) / yNormSq)
+        cNormSq = "%4f" % (util.innerProd(curlFlow, curlFlow, w) / yNormSq)
+        hNormSq = "%4f" % (util.innerProd(harmFlow, harmFlow, w) / yNormSq)
+        print(gNormSq + "\t" + cNormSq + "\t" + hNormSq)

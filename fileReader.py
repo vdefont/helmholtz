@@ -47,7 +47,7 @@ def testData4():
     items = {"A":0,"B":1,"C":2,"D":3}
     return users, weights, items
 
-# Same as test4, except with no zero edges 
+# Same as test4, except with no zero edges
 def testData5():
     u1 = {"A":0,"B":1}
     u2 = {"A":0,"C":-3}
@@ -174,5 +174,31 @@ def loadGolfData(maxPlayers = 10):
     weights = [1.0] * len(tournamentList) # Weight all tourneys equally
 
     return tournamentList, weights, playerIds
+
+def loadChessData(maxPlayers = 10):
+
+    lines = readCsvFile('data/chess/chess.csv')
+
+    curPlayers = getTopItems('data/chess/ranking.csv', maxPlayers)
+
+    matches = []
+    weights = []
+    for line in lines:
+        match = {}
+
+        name1 = line["name1"]
+        name2 = line["name2"]
+
+        # If both players aren't in our list, ignore the match
+        if not (name1 in curPlayers and name2 in curPlayers):
+            continue
+
+        match[name1] = float(line["score1"])
+        match[name2] = float(line["score2"])
+        matches.append(match)
+
+        weights.append(1)
+
+    return matches, weights, curPlayers
 
 loadGolfData()

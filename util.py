@@ -49,18 +49,18 @@ def randomizeVector(v):
         v[i] = tmp[i]
 
 def plotHistogram():
-    x = np.genfromtxt('output/varianceData/tennis50GradCurlHarm.csv', delimiter=',')
+    x = np.genfromtxt('output/varianceData/tennis50.csv', delimiter=',')
 
     plt.hist(x[:,0], bins=30)
-    plt.axvline(0.35177379571732653, color='k', linestyle='dashed', linewidth=1)
+    plt.axvline(0.351814, color='k', linestyle='dashed', linewidth=1)
     plt.show()
 
     plt.hist(x[:,1], bins=30)
-    plt.axvline(0.645027535536416, color='k', linestyle='dashed', linewidth=1)
+    plt.axvline(0.646887, color='k', linestyle='dashed', linewidth=1)
     plt.show()
 
     plt.hist(x[:,2], bins=30)
-    plt.axvline(0.00315854160653562, color='k', linestyle='dashed', linewidth=1)
+    plt.axvline(0.001299, color='k', linestyle='dashed', linewidth=1)
     plt.show()
 
 # Assumes vec is only the upper triangle
