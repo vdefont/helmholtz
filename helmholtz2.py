@@ -76,26 +76,6 @@ def matrixToVec (M):
             vec.append(M[i][j])
     return np.array(vec)
 
-# Returns solution in (im gradient) that minimizes error
-def solve(Y, W):
-
-    # Make laplacian
-    laplacian = -1 * W
-    rowSums = np.sum(W, axis=1)
-    for i in range(len(rowSums)):
-        laplacian[i][i] = rowSums[i]
-
-    # Pseudo-invert laplacian
-    pInvLap = np.linalg.pinv(laplacian)
-
-    # Make divergence
-    div = np.sum(Y * W, axis=1)
-
-    # Solve
-    s = np.sum(pInvLap * -1 * div, axis=1)
-
-    return s
-
 # Returns: map from singles to pairs
 def makeGradientMatrix (n):
     rows = int(n * (n-1) / 2)
@@ -213,8 +193,8 @@ def writeItemScoresToFile(s, itemIndices, fileName):
 
 # Returns Y, W, Grad, Curl, Harm flows
 # - randomize=True - performs bootstrapping to randomly sample data
-# - verbose=True - prints out details about 3 flows
-def getFlows(data, randomize=False):
+# - gradOnly=True - only compute grad flow. Set others to 0. (Much faster)
+def getFlows(data, randomize=False, gradFlowOnly=False, gradFlowFile=None):
     (users, weights, order) = data # Unpack args
     Y, W, itemIndices = makeMatrices(users, weights, order)
     n = len(Y)
@@ -232,46 +212,60 @@ def getFlows(data, randomize=False):
     grad = util.removeZeroEdges(gradFull, wFull, dim=0)
     gradAdj = makeGradientAdjoint(grad, w)
 
-    curlFull = makeCurlMatrix(n)
-    validTriples = getValidTripleIndices(curlFull, wFull)
-    curl = util.removeZeroEdges(curlFull, wFull, dim=1) # Keep valid edges
-    curl = util.removeZeroEdges(curl, validTriples, dim=0) # Keep valid triples
-    curlAdj = makeCurlAdjoint(curl, w)
+    if gradFlowOnly:
+        curl = 0
+        curlAdj = 0
+    else:
+        curlFull = makeCurlMatrix(n)
+        validTriples = getValidTripleIndices(curlFull, wFull)
+        curl = util.removeZeroEdges(curlFull, wFull, dim=1) # Keep valid edges
+        curl = util.removeZeroEdges(curl, validTriples, dim=0) # Keep valid triples
+        curlAdj = makeCurlAdjoint(curl, w)
 
     matrices = (y, w, grad, gradAdj, curl, curlAdj)
     gradFlow, s = getGradFlow(matrices)
-    curlFlow = getCurlFlow(matrices)
-    harmFlow = getHarmFlow(matrices)
+    if gradFlowOnly:
+        curlFlow = np.zeros(gradFlow.shape)
+        harmFlow = np.zeros(gradFlow.shape)
+    else:
+        curlFlow = getCurlFlow(matrices)
+        harmFlow = getHarmFlow(matrices)
 
-    # writeItemScoresToFile(s, itemIndices, "output/chess/ranking.csv")
+    if gradFlowFile is not None:
+        writeItemScoresToFile(s, itemIndices, gradFlowFile)
 
     return y, w, gradFlow, curlFlow, harmFlow
+
+def printFlowFractions(flows):
+    y, w, gradFlow, curlFlow, harmFlow = flows
+    yNormSq = util.innerProd(y, y, w)
+    gNormSq = "%4f" % (util.innerProd(gradFlow, gradFlow, w) / yNormSq)
+    cNormSq = "%4f" % (util.innerProd(curlFlow, curlFlow, w) / yNormSq)
+    hNormSq = "%4f" % (util.innerProd(harmFlow, harmFlow, w) / yNormSq)
+    print(gNormSq + "\t" + cNormSq + "\t" + hNormSq)
 
 pyVersion = sys.version_info[0]
 if pyVersion < 3:
     print("Please use at least python3")
 else:
     # Tennis
-    # weightMethod = "GAMES"
     # maxPlayers = 50
+    # weightMethod = "GAMES"
     # data = fileReader.loadTennisData(weightMethod = weightMethod, maxPlayers=maxPlayers)
 
     # Test
     # data = fileReader.testData4()
 
     # Chess
+    # maxPlayers = 50
+    # data = fileReader.loadChessData(50)
+
+    # flows = getFlows(data, randomize=randomize)
+    # printFlowFractions(flows)
+
     maxPlayers = 50
-    data = fileReader.loadChessData(50)
-
-    print("NOTE: First one is real. Rest are random.")
-    print("Gradient\tCurl\t\tHarmonic")
-
-    randomize=False
-    for i in range(201):
-        y, w, gradFlow, curlFlow, harmFlow = getFlows(data, randomize=randomize)
-        randomize=True
-        yNormSq = util.innerProd(y, y, w)
-        gNormSq = "%4f" % (util.innerProd(gradFlow, gradFlow, w) / yNormSq)
-        cNormSq = "%4f" % (util.innerProd(curlFlow, curlFlow, w) / yNormSq)
-        hNormSq = "%4f" % (util.innerProd(harmFlow, harmFlow, w) / yNormSq)
-        print(gNormSq + "\t" + cNormSq + "\t" + hNormSq)
+    for weightMethod in ["UNIFORM", "GAMES", "SETS", "TOURNEY"]:
+        print(weightMethod)
+        data = fileReader.loadTennisData(weightMethod, maxPlayers)
+        flows = getFlows(data)
+        printFlowFractions(flows)
