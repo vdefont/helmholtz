@@ -192,18 +192,21 @@ def writeItemScoresToFile(s, itemIndices, fileName):
             file.write('\n')
 
 # Returns Y, W, Grad, Curl, Harm flows
-# - randomize=True - performs bootstrapping to randomly sample data
+# - randomizeMethod =
+#       <bootstrap> - performs bootstrapping to randomly sample data
+#       <normal>    - draws from normal dist with same mean and stdev as data
 # - gradOnly=True - only compute grad flow. Set others to 0. (Much faster)
-def getFlows(data, randomize=False, gradFlowOnly=False, gradFlowFile=None):
+def getFlows(data, randomizeMethod=None, gradFlowOnly=False, gradFlowFile=None):
     (users, weights, order) = data # Unpack args
     Y, W, itemIndices = makeMatrices(users, weights, order)
     n = len(Y)
     yFull = matrixToVec(Y)
     wFull = matrixToVec(W)
 
-    if randomize:
-        util.randomizeVector(yFull)
-        util.randomizeVector(wFull)
+    if randomizeMethod:
+        util.randomizeVector(yFull, randomizeMethod)
+        # Only use positive values for weight
+        util.randomizeVector(wFull, randomizeMethod, positiveVals=True)
 
     y = util.removeZeroEdges(yFull, wFull)
     w = util.removeZeroEdges(wFull, wFull)
@@ -263,9 +266,29 @@ else:
     # flows = getFlows(data, randomize=randomize)
     # printFlowFractions(flows)
 
+    print("\nRANDOMIZING 50-PLAYER GOLF DATA WITH BOOTSTRAP")
     maxPlayers = 50
-    for weightMethod in ["UNIFORM", "GAMES", "SETS", "TOURNEY"]:
-        print(weightMethod)
-        data = fileReader.loadTennisData(weightMethod, maxPlayers)
-        flows = getFlows(data)
+    randomize=None
+    for i in range(2):
+        data = fileReader.loadGolfData(maxPlayers)
+        flows = getFlows(data, randomizeMethod="bootstrap")
+        randomize=True
+        printFlowFractions(flows)
+
+    print("\nRANDOMIZING 50-PLAYER GOLF DATA WITH NORMAL")
+    maxPlayers = 50
+    randomize=None
+    for i in range(2):
+        data = fileReader.loadGolfData(maxPlayers)
+        flows = getFlows(data, randomizeMethod="normal")
+        randomize=True
+        printFlowFractions(flows)
+
+    print("\nRANDOMIZING 50-PLAYER TENNIS DATA WITH NORMAL")
+    maxPlayers = 50
+    randomize=None
+    for i in range(5):
+        data = fileReader.loadTennisData("GAMES", maxPlayers)
+        flows = getFlows(data, randomizeMethod="normal")
+        randomize=True
         printFlowFractions(flows)
