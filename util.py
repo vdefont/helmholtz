@@ -38,8 +38,16 @@ def removeZeroEdges(x, wFull, dim=0):
         x2 = x2.transpose()
     return x2
 
+# Randomizes vector with specified method
+def randomizeVector(v, method, positiveVals=False):
+    if method == "bootstrap":
+        randomizeVectorBootstrap(v)
+    elif method == "normal":
+        randomizeVectorNormal(v, positiveVals)
+    else:
+        print("Error: Invalid randomize method")
 # Draws with replacement - mutates
-def randomizeVector(v):
+def randomizeVectorBootstrap(v):
     n = len(v)
     tmp = []
     for i in range(n):
@@ -47,6 +55,30 @@ def randomizeVector(v):
         tmp.append(v[r])
     for i in range(n):
         v[i] = tmp[i]
+# Draws from normal distribution with same mean and stdev as input vector
+# Mutates
+# Keeps same fraction of zero values as original matrix
+def randomizeVectorNormal(v, positiveVals):
+    # Calculate the mean and stdev for nonzero values only 
+    vNonzero = []
+    for i in range(len(v)):
+        if v[i] ** 2 > 0:
+            vNonzero.append(v[i])
+    mean = np.mean(vNonzero)
+    stdev = np.std(vNonzero)
+
+    fracNonzero = float(len(vNonzero) / len(v))
+
+    for i in range(len(v)):
+        if random.random() < fracNonzero:
+            valFound = False
+            while not valFound:
+                vi = float(np.random.normal(mean, stdev))
+                if (not positiveVals) or vi > 0:
+                    v[i] = vi
+                    valFound = True
+        else:
+            v[i] = 0
 
 def plotHistogram():
     x = np.genfromtxt('output/varianceData/chess50/chess.csv', delimiter=',')
