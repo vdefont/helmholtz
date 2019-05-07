@@ -221,6 +221,8 @@ def getFlows(data, randomize=False, gradFlowOnly=False, gradFlowFile=None):
         curl = util.removeZeroEdges(curlFull, wFull, dim=1) # Keep valid edges
         curl = util.removeZeroEdges(curl, validTriples, dim=0) # Keep valid triples
         curlAdj = makeCurlAdjoint(curl, w)
+        print("Curl shape:")
+        print(curl.shape)
 
     matrices = (y, w, grad, gradAdj, curl, curlAdj)
     gradFlow, s = getGradFlow(matrices)
@@ -263,9 +265,6 @@ else:
     # flows = getFlows(data, randomize=randomize)
     # printFlowFractions(flows)
 
-    maxPlayers = 50
-    for weightMethod in ["UNIFORM", "GAMES", "SETS", "TOURNEY"]:
-        print(weightMethod)
-        data = fileReader.loadTennisData(weightMethod, maxPlayers)
-        flows = getFlows(data)
-        printFlowFractions(flows)
+    data = fileReader.loadChessData(50)
+    flows = getFlows(data)
+    printFlowFractions(flows)
