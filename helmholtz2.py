@@ -224,8 +224,6 @@ def getFlows(data, randomizeMethod=None, gradFlowOnly=False, gradFlowFile=None):
         curl = util.removeZeroEdges(curlFull, wFull, dim=1) # Keep valid edges
         curl = util.removeZeroEdges(curl, validTriples, dim=0) # Keep valid triples
         curlAdj = makeCurlAdjoint(curl, w)
-        print("Curl shape:")
-        print(curl.shape)
 
     matrices = (y, w, grad, gradAdj, curl, curlAdj)
     gradFlow, s = getGradFlow(matrices)
@@ -268,15 +266,10 @@ else:
     # flows = getFlows(data, randomize=randomize)
     # printFlowFractions(flows)
 
-<<<<<<< HEAD
-    data = fileReader.loadChessData(50)
-    flows = getFlows(data)
-    printFlowFractions(flows)
-=======
     print("\nRANDOMIZING 50-PLAYER GOLF DATA WITH BOOTSTRAP")
     maxPlayers = 50
     randomize=None
-    for i in range(2):
+    for i in range(201):
         data = fileReader.loadGolfData(maxPlayers)
         flows = getFlows(data, randomizeMethod="bootstrap")
         randomize=True
@@ -285,7 +278,7 @@ else:
     print("\nRANDOMIZING 50-PLAYER GOLF DATA WITH NORMAL")
     maxPlayers = 50
     randomize=None
-    for i in range(2):
+    for i in range(201):
         data = fileReader.loadGolfData(maxPlayers)
         flows = getFlows(data, randomizeMethod="normal")
         randomize=True
@@ -294,9 +287,8 @@ else:
     print("\nRANDOMIZING 50-PLAYER TENNIS DATA WITH NORMAL")
     maxPlayers = 50
     randomize=None
-    for i in range(5):
+    for i in range(201):
         data = fileReader.loadTennisData("GAMES", maxPlayers)
         flows = getFlows(data, randomizeMethod="normal")
         randomize=True
         printFlowFractions(flows)
->>>>>>> 00edc0ee523519367afdba0e8e32a778e444af32
