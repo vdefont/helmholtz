@@ -268,27 +268,27 @@ else:
 
     print("\nRANDOMIZING 50-PLAYER GOLF DATA WITH BOOTSTRAP")
     maxPlayers = 50
-    randomize=None
-    for i in range(201):
+    randomizeMethod=None
+    for i in range(1):
         data = fileReader.loadGolfData(maxPlayers)
-        flows = getFlows(data, randomizeMethod="bootstrap")
-        randomize=True
+        flows = getFlows(data, randomizeMethod=randomizeMethod)
+        randomizeMethod="bootstrap"
         printFlowFractions(flows)
 
     print("\nRANDOMIZING 50-PLAYER GOLF DATA WITH NORMAL")
     maxPlayers = 50
-    randomize=None
-    for i in range(201):
+    randomizeMethod=None
+    for i in range(1):
         data = fileReader.loadGolfData(maxPlayers)
-        flows = getFlows(data, randomizeMethod="normal")
-        randomize=True
+        flows = getFlows(data, randomizeMethod=randomizeMethod)
+        randomizeMethod="normal"
         printFlowFractions(flows)
 
     print("\nRANDOMIZING 50-PLAYER TENNIS DATA WITH NORMAL")
     maxPlayers = 50
-    randomize=None
-    for i in range(201):
+    randomizeMethod=None
+    for i in range(1):
         data = fileReader.loadTennisData("GAMES", maxPlayers)
-        flows = getFlows(data, randomizeMethod="normal")
-        randomize=True
+        flows = getFlows(data, randomizeMethod=randomizeMethod)
+        randomizeMethod="normal"
         printFlowFractions(flows)
